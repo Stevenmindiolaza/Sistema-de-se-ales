@@ -1,0 +1,15 @@
+{
+  "name": "signals-bot",
+  "version": "1.0.0",
+  "description": "Sistema web de señales de trading en tiempo real (IQ Option / Exnova)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "cors": "2.8.5",
+    "dotenv": "16.4.5",
+    "express": "4.21.2",
+    "technicalindicators": "3.1.0",
+    "ws": "8.18.0"
+  }
+}

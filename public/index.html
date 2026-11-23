@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Señales en Vivo · IQ Option / Exnova</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    body { background:#0b0e14; color:#d1d4dc; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .panel { background:#131722; border:1px solid #2a2e39; border-radius:.5rem; }
+    .led { width:.75rem; height:.75rem; border-radius:9999px; display:inline-block; }
+    .led.ok { background:#00ff9c; box-shadow:0 0 8px #00ff9c; }
+    .led.wait { background:#f5a623; box-shadow:0 0 8px #f5a623; animation:pulse 1s infinite; }
+    .led.off { background:#ff5a5f; box-shadow:0 0 8px #ff5a5f; }
+    @keyframes pulse { 50% { opacity:.35; } }
+    .call { border-color:#00ff9c; box-shadow:0 0 18px rgba(0,255,156,.25); }
+    .put { border-color:#ff6b6b; box-shadow:0 0 18px rgba(255,107,107,.25); }
+    .flash { animation:flash .8s 3; }
+    @keyframes flash { 50% { filter:brightness(1.8); } }
+    th { position:sticky; top:0; background:#131722; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[#2a2e39]">
+    <h1 class="text-lg font-bold tracking-wide text-white">📡 SIGNALS<span class="text-[#00ff9c]">.LIVE</span></h1>
+    <div class="flex items-center gap-4 text-sm">
+      <span id="clock" class="text-xl font-bold text-white tabular-nums">--:--:--</span>
+      <span class="flex items-center gap-2"><span id="led" class="led off"></span><span id="statusText">Desconectado</span></span>
+    </div>
+  </header>
+
+  <main class="p-4 grid gap-4 lg:grid-cols-[320px_1fr]">
+    <!-- Panel de control -->
+    <aside class="panel p-4 space-y-4 h-fit">
+      <h2 class="font-bold text-white">Panel de control</h2>
+      <div>
+        <label class="text-xs text-gray-400">Bróker</label>
+        <select id="broker" class="w-full mt-1 bg-[#0b0e14] border border-[#2a2e39] rounded p-2">
+          <option value="iqoption">IQ Option</option>
+          <option value="exnova">Exnova</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-400">SSID (solo se guarda en memoria del servidor)</label>
+        <input id="ssid" type="password" autocomplete="off" placeholder="Pega aquí tu SSID" class="w-full mt-1 bg-[#0b0e14] border border-[#2a2e39] rounded p-2">
+      </div>
+      <div>
+        <label class="text-xs text-gray-400">Temporalidad</label>
+        <div class="grid grid-cols-2 gap-2 mt-1">
+          <button data-size="60" class="tf px-3 py-2 rounded border border-[#2a2e39]">M1</button>
+          <button data-size="300" class="tf px-3 py-2 rounded border border-[#2a2e39]">M5</button>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-400">Pares</label>
+        <div id="assets" class="grid grid-cols-2 gap-1 mt-1 max-h-56 overflow-y-auto text-sm"></div>
+      </div>
+      <div class="border-t border-[#2a2e39] pt-3 space-y-2">
+        <h3 class="font-bold text-white text-sm">Análisis de acción del precio</h3>
+        <label class="text-xs text-gray-400">Par manual (opcional, ej. HBAR OTC)</label>
+        <input id="customPair" list="assetList" autocomplete="off" placeholder="Escribe un par" class="w-full bg-[#0b0e14] border border-[#2a2e39] rounded p-2 uppercase">
+        <datalist id="assetList"></datalist>
+        <div class="grid grid-cols-[1fr_auto] gap-2">
+          <select id="anMinutes" class="bg-[#0b0e14] border border-[#2a2e39] rounded p-2">
+            <option value="3">3 min</option><option value="5" selected>5 min</option><option value="10">10 min</option><option value="15">15 min</option>
+          </select>
+          <button id="btnAnalyze" class="px-4 py-2 rounded bg-sky-500 text-black font-bold hover:brightness-110">Analizar</button>
+        </div>
+        <p class="text-xs text-gray-500">Analiza en M1 los pares marcados (más el escrito) y genera señales CALL/PUT al cierre de cada vela.</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btnConnect" class="py-2 rounded bg-[#00c985] text-black font-bold hover:brightness-110">Conectar</button>
+        <button id="btnDisconnect" class="py-2 rounded bg-[#2a2e39] hover:bg-[#363b49]">Desconectar</button>
+      </div>
+      <button id="btnApply" class="w-full py-2 rounded border border-[#2a2e39] hover:bg-[#1c2030] text-sm">Aplicar pares / temporalidad</button>
+      <label class="flex items-center gap-2 text-sm"><input id="sound" type="checkbox" checked> Alerta sonora</label>
+      <p id="msg" class="text-xs text-amber-400 min-h-[1rem]"></p>
+    </aside>
+
+    <section class="space-y-4 min-w-0">
+      <!-- Señales analizadas -->
+      <div class="panel p-3">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <h2 class="font-bold text-white mr-auto">Señales analizadas</h2>
+          <span id="anStatus" class="text-xs text-amber-400"></span>
+          <button id="btnStopAn" class="px-3 py-1 rounded bg-[#2a2e39] hover:bg-[#363b49] text-sm">Detener</button>
+          <button id="btnCopyAll" class="px-3 py-1 rounded bg-[#00c985] text-black font-bold text-sm hover:brightness-110">Copiar lista</button>
+        </div>
+        <div class="h-1 bg-[#2a2e39] rounded"><div id="anBar" class="h-1 bg-[#00ff9c] rounded" style="width:0%"></div></div>
+        <pre id="anList" class="mt-2 text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">Sin análisis todavía.</pre>
+      </div>
+
+      <!-- Señales activas -->
+      <div>
+        <h2 class="font-bold text-white mb-2">Señales activas</h2>
+        <div id="live" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div class="panel p-4 text-gray-500 text-sm col-span-full">Esperando confluencia de la estrategia…</div>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="kpis"></div>
+      <div class="panel p-3">
+        <h3 class="text-sm font-bold text-white mb-2">Winrate por activo</h3>
+        <div id="byAsset" class="flex flex-wrap gap-2 text-xs"></div>
+      </div>
+
+      <!-- Historial -->
+      <div class="panel p-3">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <h3 class="font-bold text-white mr-auto">Historial en tiempo real</h3>
+          <select id="fBroker" class="bg-[#0b0e14] border border-[#2a2e39] rounded p-1 text-sm">
+            <option value="">Todos los brókeres</option>
+            <option value="iqoption">IQ Option</option>
+            <option value="exnova">Exnova</option>
+          </select>
+          <select id="fStatus" class="bg-[#0b0e14] border border-[#2a2e39] rounded p-1 text-sm">
+            <option value="">Todos los estados</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="MG1">En MG1</option>
+            <option value="GANADA">Ganada</option>
+            <option value="GANADA_MG1">Ganada MG1</option>
+            <option value="PERDIDA">Perdida</option>
+            <option value="EMPATE">Empate</option>
+            <option value="ANULADA">Anulada</option>
+          </select>
+          <button id="btnCsv" class="px-3 py-1 rounded bg-[#2a2e39] hover:bg-[#363b49] text-sm">Exportar CSV</button>
+          <button id="btnClear" class="px-3 py-1 rounded border border-[#ff6b6b] text-[#ff6b6b] hover:bg-[#2a1518] text-sm">Limpiar historial</button>
+        </div>
+        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs text-gray-400">
+              <tr><th class="p-2">Hora</th><th class="p-2">Bróker</th><th class="p-2">Par</th><th class="p-2">TF</th><th class="p-2">Dir.</th><th class="p-2">Patrón</th><th class="p-2">Entrada</th><th class="p-2">Cierre</th><th class="p-2">Estado</th><th class="p-2"></th></tr>
+            </thead>
+            <tbody id="history"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
